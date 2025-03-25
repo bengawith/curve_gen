@@ -146,8 +146,10 @@ def load_scalers(input_path: str) -> Tuple[StandardScaler, MinMaxScaler]:
     """
     Load scalers from a file.
     """
-    X_scaler = joblib.load(input_path + "/X_scaler.gz")
-    y_scaler = joblib.load(input_path + "/y_scaler.gz")
+    if not input_path.endswith("\\") and not input_path.endswith("/"):
+        input_path += "/"
+    X_scaler = joblib.load(input_path + "X_scaler.gz")
+    y_scaler = joblib.load(input_path + "y_scaler.gz")
     return X_scaler, y_scaler
 
 
