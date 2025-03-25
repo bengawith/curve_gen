@@ -1,0 +1,42 @@
+{
+    "0": {
+        "hidden_size": 224,
+        "num_layers": 3,
+        "dropout_rate": 0.2899699107239718,
+        "learning_rate": 0.00033693063711009996,
+        "num_epochs": 462,
+        "mse": 0.0037415416445583105
+    },
+    "1": {
+        "hidden_size": 224,
+        "num_layers": 3,
+        "dropout_rate": 0.330064019180263,
+        "learning_rate": 0.0003256641174661204,
+        "num_epochs": 462,
+        "mse": 0.0037860493175685406
+    },
+    "2": {
+        "hidden_size": 160,
+        "num_layers": 2,
+        "dropout_rate": 0.41709410418842563,
+        "learning_rate": 0.001382247924164502,
+        "num_epochs": 413,
+        "mse": 0.0038430660497397184
+    },
+    "3": {
+        "hidden_size": 160,
+        "num_layers": 3,
+        "dropout_rate": 0.3933536324226202,
+        "learning_rate": 0.0004910682768737048,
+        "num_epochs": 450,
+        "mse": 0.0038544267881661654
+    },
+    "4": {
+        "hidden_size": 224,
+        "num_layers": 3,
+        "dropout_rate": 0.3430702959113672,
+        "learning_rate": 0.0003823997526322767,
+        "num_epochs": 466,
+        "mse": 0.003859760472550988
+    }
+}

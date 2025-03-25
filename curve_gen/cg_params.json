@@ -1,0 +1,11 @@
+{
+    "net_name": "GRUModel",
+    "input_size": 14,
+    "output_size": 96,
+    "hidden_size": 96,
+    "num_layers": 4,
+    "dropout_rate": 0.14353845326011205,
+    "learning_rate": 0.00036901617524633644,
+    "num_epochs": 483,
+    "mse": 0.003672060091048479
+}

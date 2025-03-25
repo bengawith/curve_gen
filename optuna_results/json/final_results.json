@@ -1,0 +1,174 @@
+{
+    "pi": {
+        "GRUModel": {
+            "r2": 0.7681,
+            "mse": 0.8573,
+            "rmse": 0.7147,
+            "mae": 0.5168
+        },
+        "FullyConnectedNN": {
+            "r2": 0.7795,
+            "mse": 0.816,
+            "rmse": 0.6966,
+            "mae": 0.5029
+        },
+        "LSTMModel": {
+            "r2": 0.7941,
+            "mse": 0.7561,
+            "rmse": 0.6723,
+            "mae": 0.4912
+        }
+    },
+    "huber": {
+        "GRUModel": {
+            "r2": 0.7768,
+            "mse": 0.8305,
+            "rmse": 0.7038,
+            "mae": 0.5137
+        },
+        "FullyConnectedNN": {
+            "r2": 0.7643,
+            "mse": 0.8857,
+            "rmse": 0.7248,
+            "mae": 0.5235
+        },
+        "LSTMModel": {
+            "r2": 0.7857,
+            "mse": 0.8058,
+            "rmse": 0.6921,
+            "mae": 0.5078
+        }
+    },
+    "mse": {
+        "GRUModel": {
+            "r2": 0.7898,
+            "mse": 0.7581,
+            "rmse": 0.6752,
+            "mae": 0.4823
+        },
+        "FullyConnectedNN": {
+            "r2": 0.7691,
+            "mse": 0.8775,
+            "rmse": 0.7206,
+            "mae": 0.5149
+        },
+        "LSTMModel": {
+            "r2": 0.7934,
+            "mse": 0.7477,
+            "rmse": 0.6697,
+            "mae": 0.4843
+        }
+    },
+    "log_cosh": {
+        "GRUModel": {
+            "r2": 0.7946,
+            "mse": 0.736,
+            "rmse": 0.6657,
+            "mae": 0.48
+        },
+        "FullyConnectedNN": {
+            "r2": 0.7714,
+            "mse": 0.8754,
+            "rmse": 0.7193,
+            "mae": 0.5222
+        },
+        "LSTMModel": {
+            "r2": 0.7927,
+            "mse": 0.7389,
+            "rmse": 0.6674,
+            "mae": 0.483
+        }
+    },
+    "top_dict": {
+        "pi": {
+            "r2": {
+                "score": 0.7941,
+                "net": "LSTMModel"
+            },
+            "mse": {
+                "score": 0.7561,
+                "net": "LSTMModel"
+            },
+            "rmse": {
+                "score": 0.6723,
+                "net": "LSTMModel"
+            },
+            "mae": {
+                "score": 0.4912,
+                "net": "LSTMModel"
+            }
+        },
+        "pi_new": {
+            "r2": {
+                "score": 0.5605,
+                "net": "FullyConnectedNN"
+            },
+            "mse": {
+                "score": 1.6176,
+                "net": "FullyConnectedNN"
+            },
+            "rmse": {
+                "score": 0.978,
+                "net": "FullyConnectedNN"
+            },
+            "mae": {
+                "score": 0.7619,
+                "net": "FullyConnectedNN"
+            }
+        },
+        "huber": {
+            "r2": {
+                "score": 0.7857,
+                "net": "LSTMModel"
+            },
+            "mse": {
+                "score": 0.8058,
+                "net": "LSTMModel"
+            },
+            "rmse": {
+                "score": 0.6921,
+                "net": "LSTMModel"
+            },
+            "mae": {
+                "score": 0.5078,
+                "net": "LSTMModel"
+            }
+        },
+        "mse": {
+            "r2": {
+                "score": 0.7934,
+                "net": "LSTMModel"
+            },
+            "mse": {
+                "score": 0.7477,
+                "net": "LSTMModel"
+            },
+            "rmse": {
+                "score": 0.6697,
+                "net": "LSTMModel"
+            },
+            "mae": {
+                "score": 0.4823,
+                "net": "GRUModel"
+            }
+        },
+        "log_cosh": {
+            "r2": {
+                "score": 0.7946,
+                "net": "GRUModel"
+            },
+            "mse": {
+                "score": 0.736,
+                "net": "GRUModel"
+            },
+            "rmse": {
+                "score": 0.6657,
+                "net": "GRUModel"
+            },
+            "mae": {
+                "score": 0.48,
+                "net": "GRUModel"
+            }
+        }
+    }
+}
