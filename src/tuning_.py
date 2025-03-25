@@ -4,7 +4,7 @@ from sklearn.metrics import r2_score, mean_squared_error, mean_absolute_error
 from src.models_ import FullyConnectedNN, GRUModel, LSTMModel
 from src.losses_ import huber_loss, logcosh_loss, mse_loss, physics_informed_loss
 from src.train_eval_ import train_model
-from src.utils_ import DataDB
+from src.db import DataDB
 import numpy as np
 import atexit
 import signal
