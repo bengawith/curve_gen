@@ -1,6 +1,6 @@
 # Airfoil Lift Curve Prediction using Neural Networks (CurveGen)
 
-This project explores the use of neural networks to predict lift coefficient (CL) vs. angle of attack curves from aerofoil geometries using CST (Class Shape Transformation) parameters. It integrates both XFoil-generated data and CFD simulations (Ansys Fluent) to validate the accuracy and generalisation of the model.
+This project explores the use of neural networks to predict lift coefficient (CL) vs. angle of attack curves from aerofoil geometries using CST (Class Shape Transformation) parameters. It integrates both XFoil-generated data and CFD simulations (Ansys Fluent) to validate the accuracy and generalisation of the model. Please refer to "paper/Final_Report.pdf" for the full project paper.
 
 ## Project Overview
 - **Objective:** Predict the lift curve (CL vs. alpha) of aerofoils using a trained GRU-based neural network.
@@ -15,7 +15,7 @@ project/
 │   ├── cg_scalers/            # Scalers for input and output data
 │   ├── cg_model.pt            # Trained model
 │   ├── cg_params.json         # Trained models
-│   └── curve_gen.py                  # Class for generating lift curves from aerofoils
+│   └── curve_gen.py           # Class for generating lift curves from aerofoils
 ├── data/
 │   ├── aerofoil_data/         # Aerofoil geometry data
 │   └── csv/                   # CSV files containing full dataset
@@ -25,6 +25,8 @@ project/
 │   ├── loss_func_results/     # Results for different loss functions
 │   └── plot_analysis.py       # Plotting results script
 ├── scripts/                   # Python scripts
+├── paper/
+│   └── Final_Report.pdf       # Full project paper
 ├── src/
 │   ├── data_.py               # Data preprocessing
 │   ├── errors_.py             # Error metrics
