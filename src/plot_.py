@@ -79,21 +79,21 @@ class CurveVisualiser:
         ax.legend()
         ax.grid(True)
 
-        # Ensure rounding before passing to table
+        # Ensuring rounding before passing to table
         actual_rounded = np.round(actual.flatten(), 4)
         predicted_rounded = np.round(predicted.flatten(), 4)
 
-        # Create formatted table data
+        # Creating formatted table data
         table_data = np.column_stack((actual_rounded, predicted_rounded)).tolist()
 
         colLabels = ['Actual', 'Predicted']
 
-        # Create table below the plot
+        # Creating table below the plot
         table = plt.table(cellText=table_data,
                         colLabels=colLabels,
                         loc='bottom',
                         cellLoc='center',
-                        bbox=[0.0, -0.4, 1.0, 0.3],  # Adjust position for better readability
+                        bbox=[0.0, -0.4, 1.0, 0.3],  # Adjusting position for better readability
                         cellColours=[['lightgrey'] * 2] * len(table_data),
                         colWidths=[.5]*2,
                         )
@@ -105,7 +105,7 @@ class CurveVisualiser:
         
         table.set_fontsize(10)
 
-        # Adjust spacing to prevent table overlap
+        # Adjusting spacing to prevent table overlap
         plt.subplots_adjust(bottom=0.4)  
 
         if show:

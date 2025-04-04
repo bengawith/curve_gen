@@ -62,12 +62,10 @@ class GRUModel(nn.Module):
         self.fc = nn.Linear(hidden_size, output_size)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        # If input is (batch, input_size), unsqueeze to (batch, 1, input_size)
         if x.dim() == 2:
             x = x.unsqueeze(1)
         h0 = torch.zeros(self.num_layers, x.size(0), self.hidden_size).to(x.device)
         out, _ = self.gru(x, h0)
-        # Use the last time step's output
         out = self.fc(out[:, -1, :])
         return out
     
