@@ -83,7 +83,7 @@ def read_coords(file_path: str, n_digits: int = 6) -> np.array:
         return np.array([[round(float(p), n_digits) for p in line.strip().split()] for line in lines if len(line.strip().split()) == 2])
 
 
-def preprocess_from_dat(file_path: Optional[str]=None, aerofoil_name: Optional[str]=None, coords: Optional[list]=None, dat_directory: str='./data/aerofoil_data') -> Tuple[Dict[str, Any], str]:
+def preprocess_from_dat(file_path: Optional[str]=None, aerofoil_name: Optional[str]=None, coords: Optional[list]=None, dat_directory: str='./data/aerofoil_data') -> Tuple[Dict[str, Any], str, np.ndarray]:
     """
     Preprocess an aerofoil .dat file or aerofoil name into Kulfan parameters.
 
@@ -176,7 +176,7 @@ def deserialize_state_dict(state_dict: dict) -> dict:
     return deserializable
 
 
-def load_model_from_state_dict(model: torch.nn.Module, model_path: str, device: str = "cpu") -> torch.nn.Module:
+def load_model_from_state_dict(model: torch.nn.Module, model_path: str | Path, device: str = "cpu") -> torch.nn.Module:
     return model.load_state_dict(torch.load(model_path, map_location=torch.device(device)))
 
 
