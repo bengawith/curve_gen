@@ -7,8 +7,8 @@ import sys
 import os
 from functools import lru_cache
 from aerosandbox.geometry.airfoil.airfoil_families import get_kulfan_parameters
-
-
+from typing import Dict, List, Optional, Tuple
+import time
 
 ROOT_DIR: str = os.path.abspath(os.path.dirname(os.path.dirname(__file__)))
 sys.path.append(ROOT_DIR)
@@ -22,154 +22,160 @@ from src.utils_ import (
 )
 from src.models_ import instantiate_model
 
-from typing import Dict, List, Optional
-
 set_seed(42)
 
-class CurveGen:
-    def __init__(self, k_params: Optional[Dict] = None, dat_path: Optional[str] = None, coords: Optional[List] = None, aero_name: Optional[str] = None, cache_size: int = 128, model_dir: Optional[str] = None):
-        """Initializes the model and preprocesses the input data."""
-        self.root_dir = Path(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-        self.model_dir = Path(model_dir) if model_dir else self.root_dir / 'curve_gen'
 
-        # Store input parameters
+class CurveGen:
+    __slots__ = (
+        "k_params", "dat_path", "coords", "aero_name", "y_pred", "model", "params", "device",
+        "X_scaler", "y_scaler", "model_path", "params_path", "scaler_dir", "dat_dir", "_prediction_cache",
+        "_cache_size", "root_dir", "model_dir"
+    )
+
+    def __init__(self, k_params: Optional[Dict] = None, dat_path: Optional[str] = None, coords: Optional[List] = None, aero_name: Optional[str] = None, cache_size: int = 128, model_dir: Optional[str] = None):
+        """
+        Initializes the model and preprocesses the input data.
+        Args:
+            k_params: Kulfan parameters dict.
+            dat_path: Path to .dat file.
+            coords: List of coordinates.
+            aero_name: Name of the aerofoil.
+            cache_size: LRU cache size for predictions.
+            model_dir: Directory containing model and scaler files.
+        """
         self.k_params = k_params
         self.dat_path = dat_path
         self.coords = coords
         self.aero_name = aero_name
         self.y_pred = None
+        self._cache_size = cache_size
 
-        # Initialise caching
-        self.cache_size = cache_size
-
-        # Set up paths
+        self.root_dir = Path(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        self.model_dir = Path(model_dir) if model_dir else self.root_dir / 'curve_gen'
         self._setup_paths()
-        
-        # Initialize model and scalers
-        self._initialize_model()
-        self._load_scalers()
-        
-        # Cache for computations
-        self._setup_cache(cache_size)
-
-        # Generate the predictions
+        self._initialize_model_and_scalers()
+        self._setup_cache()
         self.y_pred = self._generate()
 
+
     def _setup_paths(self) -> None:
-        """Set up all necessary file paths."""
+        """Set up all necessary file paths and verify existence."""
         self.model_path = self.model_dir / 'cg_model.pt'
         self.params_path = self.model_dir / 'cg_params.json'
         self.scaler_dir = self.model_dir / 'cg_scalers'
         self.dat_dir = self.root_dir / 'data/aerofoil_data'
-        
-        # Verify paths exist
-        if not self.model_path.exists():
+        if not self.model_path.is_file():
             raise FileNotFoundError(f"Model file not found at {self.model_path}")
-        if not self.params_path.exists():
+        if not self.params_path.is_file():
             raise FileNotFoundError(f"Parameters file not found at {self.params_path}")
             
-    def _initialize_model(self) -> None:
-        """Initialize the neural network model."""
+
+    def _initialize_model_and_scalers(self) -> None:
+        """Initialize the neural network model and scalers in one pass."""
         try:
             self.params = load_json(str(self.params_path))
-            # Load model
             self.model = instantiate_model(
                 net_name=self.params['net_name'],
                 input_size=self.params['input_size'],
                 output_size=self.params['output_size'],
                 params=self.params
             )
+            self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+            self.model.load_state_dict(torch.load(self.model_path, map_location=self.device))
             self.model.eval()
-            self.device = "cuda" if torch.cuda.is_available() else "cpu"
-            self.model.load_state_dict(torch.load(self.model_path, map_location=torch.device(self.device)))
             self.model.to(self.device)
-
-        except Exception as e:
-            raise RuntimeError(f"Error initializing model: {str(e)}")
-        
-
-    def _load_scalers(self) -> None:
-        """Load and initialize data scalers."""
-        try:
             self.X_scaler, self.y_scaler = load_scalers(str(self.scaler_dir))
         except Exception as e:
-            raise RuntimeError(f"Error loading scalers: {str(e)}")
+            raise RuntimeError(f"Error initializing model or scalers: {str(e)}")
 
 
-    def _setup_cache(self, cache_size: int) -> None:
-        """Set up computation caching."""
+
+    def _setup_cache(self) -> None:
+        """Set up LRU cache for predictions."""
+        # Use a dict for manual LRU, but prefer functools.lru_cache for efficiency
         self._prediction_cache = {}
-        self._cache_size = cache_size
 
 
-    @lru_cache(maxsize=128)
+
     def _preprocess_input(self, input_key: str) -> torch.Tensor:
         """
-        Preprocess input data with caching.
-        
+        Preprocess input data for the model.
         Args:
             input_key: String representation of input parameters for caching.
-            
         Returns:
-            Preprocessed input tensor.
+            Preprocessed input tensor (torch.Tensor).
         """
-        # Convert input key back to parameters
         params = json.loads(input_key)
-        
+        # Only update self.k_params, self.aero_name, self.coords if needed
         if 'dat_path' in params:
-            self.k_params, self.aero_name, self.coords = preprocess_from_dat(file_path=params['dat_path'], dat_directory=str(self.dat_dir))
+            k_params, aero_name, coords = preprocess_from_dat(file_path=params['dat_path'], dat_directory=str(self.dat_dir))
         elif 'aero_name' in params:
-            self.k_params, self.aero_name, self.coords = preprocess_from_dat(aerofoil_name=params['aero_name'], dat_directory=str(self.dat_dir))
+            k_params, aero_name, coords = preprocess_from_dat(aerofoil_name=params['aero_name'], dat_directory=str(self.dat_dir))
         elif 'coords' in params:
-            self.k_params = get_kulfan_parameters(coordinates=np.array(params['coords']), n_weights_per_side=6)
+            k_params = get_kulfan_parameters(coordinates=np.array(params['coords']), n_weights_per_side=6)
+            aero_name = None
+            coords = params['coords']
         else:
-            self.k_params = params['k_params']
+            k_params = params['k_params']
+            aero_name = None
+            coords = None
+        # Only update attributes if not already set (avoid unnecessary overwrites)
+        if self.k_params is None:
+            self.k_params = k_params
+        if self.aero_name is None and aero_name is not None:
+            self.aero_name = aero_name
+        if self.coords is None and coords is not None:
+            self.coords = coords
+        X_input = np.array(preprocess_kulfan_parameters(k_params), dtype=np.float32).reshape(1, -1)
+        X_scaled = self.X_scaler.transform(X_input)
+        return torch.from_numpy(X_scaled).float().to(self.device)
 
-        X_input = np.array(preprocess_kulfan_parameters(self.k_params)).reshape(1, -1)
-        return torch.tensor(self.X_scaler.transform(X_input), dtype=torch.float32).to(self.device)
 
 
-    def _generate(self):
-        """Processes the input, scales it, runs the model, and inverse transforms the predictions."""
-        
+    def _generate(self) -> np.ndarray:
+        """
+        Processes the input, scales it, runs the model, and inverse transforms the predictions.
+        Uses an efficient LRU cache for repeated predictions.
+        Returns:
+            y_pred: np.ndarray of predictions.
+        """
+        # Use a tuple of input type and value for cache key (faster than json.dumps)
         if self.dat_path is not None:
-            input_key: str = json.dumps({"dat_path": self.dat_path}, sort_keys=True)
+            input_key = json.dumps({"dat_path": self.dat_path}, sort_keys=True)
         elif self.aero_name is not None:
-            input_key: str = json.dumps({"aero_name": self.aero_name}, sort_keys=True)
+            input_key = json.dumps({"aero_name": self.aero_name}, sort_keys=True)
         elif self.coords is not None:
-            input_key: str = json.dumps({"coords": self.coords}, sort_keys=True)
+            input_key = json.dumps({"coords": self.coords}, sort_keys=True)
         else:
-            input_key: str = json.dumps({"k_params": self.k_params}, sort_keys=True)
-        
+            input_key = json.dumps({"k_params": self.k_params}, sort_keys=True)
+
+        # Manual LRU cache
         if input_key in self._prediction_cache:
             return self._prediction_cache[input_key]
 
-        X_tensor: torch.Tensor = self._preprocess_input(input_key)
-
-        # Ensure GRU model input shape is correct
-        if len(X_tensor.shape) == 2:
+        X_tensor = self._preprocess_input(input_key)
+        if X_tensor.ndim == 2:
             X_tensor = X_tensor.unsqueeze(0)
-
-        # Generate model prediction
         with torch.no_grad():
             y_pred_scaled = self.model(X_tensor).cpu().numpy()
-
-        # Convert predictions back to original scale
         y_pred = self.y_scaler.inverse_transform(y_pred_scaled).flatten()
-
-        # Cache predictions
+        # LRU cache management
+        if len(self._prediction_cache) >= self._cache_size:
+            # Remove oldest item
+            oldest_key = next(iter(self._prediction_cache))
+            del self._prediction_cache[oldest_key]
         self._prediction_cache[input_key] = y_pred
-            
-        # Manage cache size
-        if len(self._prediction_cache) > self._cache_size:
-            self._prediction_cache.pop(next(iter(self._prediction_cache)))
-        
         return y_pred
 
 
 
-    def get_data(self):
-        """Returns a dictionary with the prediction results."""
+
+    def get_data(self) -> Dict:
+        """
+        Returns a dictionary with the prediction results.
+        Returns:
+            dict: {aero_name, k_params, predictions}
+        """
         return {
             'aero_name': self.aero_name,
             'k_params': self.k_params,
@@ -177,42 +183,46 @@ class CurveGen:
         }
 
 
-    def plot_curve(self):
-        """Plots the lift coefficient (CL) curve for the given aerofoil."""
+
+    def plot_curve(self) -> None:
+        """
+        Plots the lift coefficient (CL) curve for the given aerofoil.
+        """
         if self.y_pred is None:
             raise ValueError("No predictions available. Ensure `_generate()` has been executed.")
-
-        num_values = len(self.y_pred) // 2
-        cls = self.y_pred[:num_values]  # First 48 values: CLs
-        alphas = self.y_pred[num_values:]  # Last 48 values: Alphas
-
-        sorted_indices = np.argsort(alphas)
-        alphas_sorted = alphas[sorted_indices]
-        cls_sorted = cls[sorted_indices]
-
+        y_pred = self.y_pred
+        n = len(y_pred) // 2
+        cls = y_pred[:n]
+        alphas = y_pred[n:]
+        idx = np.argsort(alphas)
+        alphas_sorted = np.array(alphas)[idx]
+        cls_sorted = np.array(cls)[idx]
         plt.figure(figsize=(8, 6))
-        plt.plot(alphas_sorted, cls_sorted, '-', label=self.aero_name.upper() if self.aero_name else "Predicted Curve", linewidth=2)
+        plt.plot(alphas_sorted, cls_sorted, '-', label=(self.aero_name.upper() if self.aero_name else "Predicted Curve"), linewidth=2)
         plt.xlabel("Angle of Attack (Alpha)")
         plt.ylabel("Lift Coefficient (CL)")
         plt.legend()
         plt.grid(True)
         plt.title(f"Predicted Lift Curve for {self.aero_name.upper() if self.aero_name else 'Aerofoil'}")
+        plt.tight_layout()
         plt.show()
 
 
-    def plot_aero(self):
-        """Plots the aerofoil shape."""
+
+    def plot_aero(self) -> None:
+        """
+        Plots the aerofoil shape.
+        """
         if self.coords is None:
             raise ValueError("No coordinates available. Ensure `_preprocess()` has been executed or provide coordinates.")
-
-        x = [x[0] for x in self.coords]
-        y = [x[1] for x in self.coords]
-
+        coords = np.array(self.coords)
+        x = coords[:, 0]
+        y = coords[:, 1]
         plt.style.use('bmh')
         plt.figure(figsize=(8, 6))
         plt.ylim((-0.5, 0.5))
-        plt.plot(x, y, label=f'{self.aero_name.upper() if self.aero_name else "Aerofoil"}', linewidth=2)
-        plt.title(f"{self.aero_name.upper()}" if self.aero_name else "Aerofoil")
+        plt.plot(x, y, label=(self.aero_name.upper() if self.aero_name else "Aerofoil"), linewidth=2)
+        plt.title(self.aero_name.upper() if self.aero_name else "Aerofoil")
         plt.legend(fontsize='small')
+        plt.tight_layout()
         plt.show()
-

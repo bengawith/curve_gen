@@ -1,6 +1,6 @@
 from curve_gen.curve_gen import CurveGen
 import argparse
-import sys, os
+import sys, os, json
 sys.path.append(os.path.abspath(os.path.dirname(__file__)))
 
 def main():
@@ -14,11 +14,11 @@ def main():
     args = parser.parse_args()
     
     if args.k_params:
-        curve_gen = CurveGen(k_params=dict(args.k_params))
+        curve_gen = CurveGen(k_params=json.loads(args.k_params))
     elif args.dat_path:
         curve_gen = CurveGen(dat_path=args.dat_path)
     elif args.coords:
-        curve_gen = CurveGen(coords=[float(x) for x in args.coords])
+        curve_gen = CurveGen(coords=json.loads(args.coords))
     elif args.aero_name:
         curve_gen = CurveGen(aero_name=args.aero_name)
     else:
@@ -31,6 +31,6 @@ if __name__ == "__main__":
     # Example usage:
     # python cg.py --k_params '{"param1": value1, "param2": value2}'
     # python cg.py --dat_path '<path_to_dat_file>'
-    # python cg.py --coords '[(x_1, y_1), (x_2, y_2)]'
+    # python cg.py --coords '[[x_1, y_1], [x_2, y_2]]'
     # python cg.py --aero_name 'drgnfly'
     main()
