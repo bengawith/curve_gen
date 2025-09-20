@@ -8,7 +8,7 @@ import os
 from functools import lru_cache
 from aerosandbox.geometry.airfoil.airfoil_families import get_kulfan_parameters
 from typing import Dict, List, Optional, Tuple
-import time
+
 
 ROOT_DIR: str = os.path.abspath(os.path.dirname(os.path.dirname(__file__)))
 sys.path.append(ROOT_DIR)
@@ -23,6 +23,20 @@ from src.utils_ import (
 from src.models_ import instantiate_model
 
 set_seed(42)
+
+class NumpyEncoder(json.JSONEncoder):
+    """JSON encoder for numpy arrays."""
+    def default(self, o):
+        if isinstance(o, np.ndarray):
+            return o.tolist()
+        return super().default(o)
+
+
+class CurveGenError(Exception):
+    """Custom exception for CurveGen errors."""
+    def __init__(self, message: str):
+        super().__init__(message)
+        self.message = message
 
 
 class CurveGen:
@@ -43,6 +57,7 @@ class CurveGen:
             cache_size: LRU cache size for predictions.
             model_dir: Directory containing model and scaler files.
         """
+        self._validate_inputs(k_params, dat_path, coords, aero_name)  # Upgrade: Add validation
         self.k_params = k_params
         self.dat_path = dat_path
         self.coords = coords
@@ -57,6 +72,12 @@ class CurveGen:
         self._setup_cache()
         self.y_pred = self._generate()
 
+    def _validate_inputs(self, k_params, dat_path, coords, aero_name):  # Upgrade: New method for validation
+        """Validate that exactly one input type is provided."""
+        inputs = [k_params, dat_path, coords, aero_name]
+        provided = [i for i in inputs if i is not None]
+        if len(provided) != 1:
+            raise CurveGenError("Exactly one input (k_params, dat_path, coords, or aero_name) must be provided.")
 
     def _setup_paths(self) -> None:
         """Set up all necessary file paths and verify existence."""
@@ -65,9 +86,9 @@ class CurveGen:
         self.scaler_dir = self.model_dir / 'cg_scalers'
         self.dat_dir = self.root_dir / 'data/aerofoil_data'
         if not self.model_path.is_file():
-            raise FileNotFoundError(f"Model file not found at {self.model_path}")
+            raise CurveGenError(f"Model file not found at {self.model_path}")
         if not self.params_path.is_file():
-            raise FileNotFoundError(f"Parameters file not found at {self.params_path}")
+            raise CurveGenError(f"Parameters file not found at {self.params_path}")
             
 
     def _initialize_model_and_scalers(self) -> None:
@@ -86,16 +107,33 @@ class CurveGen:
             self.model.to(self.device)
             self.X_scaler, self.y_scaler = load_scalers(str(self.scaler_dir))
         except Exception as e:
-            raise RuntimeError(f"Error initializing model or scalers: {str(e)}")
-
-
+            raise CurveGenError(f"Error initializing model or scalers: {str(e)}")
 
     def _setup_cache(self) -> None:
-        """Set up LRU cache for predictions."""
-        # Use a dict for manual LRU, but prefer functools.lru_cache for efficiency
-        self._prediction_cache = {}
+        """Set up LRU cache for predictions using functools.lru_cache."""  # Upgrade: Use built-in LRU
+        self._prediction_cache = lru_cache(maxsize=self._cache_size)(self._cached_generate)
 
+    def _cached_generate(self, input_key: str) -> np.ndarray:  # Upgrade: Refactored for caching
+        """Cached version of prediction generation."""
+        X_tensor = self._preprocess_input(input_key)
+        if X_tensor.ndim == 2:
+            X_tensor = X_tensor.unsqueeze(0)
+        with torch.no_grad():
+            y_pred_scaled = self.model(X_tensor).cpu().numpy()
+        return self.y_scaler.inverse_transform(y_pred_scaled).flatten()
 
+    def _extract_params_from_key(self, input_key: str) -> Tuple[Optional[Dict], Optional[str], Optional[List]]:  # Upgrade: New helper
+        """Extract k_params, aero_name, coords from input_key."""
+        params = json.loads(input_key)
+        if 'dat_path' in params:
+            return preprocess_from_dat(file_path=params['dat_path'], dat_directory=str(self.dat_dir))
+        elif 'aero_name' in params:
+            return preprocess_from_dat(aerofoil_name=params['aero_name'], dat_directory=str(self.dat_dir))
+        elif 'coords' in params:
+            k_params = get_kulfan_parameters(coordinates=np.array(params['coords']), n_weights_per_side=6)
+            return k_params, None, params['coords']
+        else:
+            return params['k_params'], None, None
 
     def _preprocess_input(self, input_key: str) -> torch.Tensor:
         """
@@ -105,70 +143,51 @@ class CurveGen:
         Returns:
             Preprocessed input tensor (torch.Tensor).
         """
-        params = json.loads(input_key)
-        # Only update self.k_params, self.aero_name, self.coords if needed
-        if 'dat_path' in params:
-            k_params, aero_name, coords = preprocess_from_dat(file_path=params['dat_path'], dat_directory=str(self.dat_dir))
-        elif 'aero_name' in params:
-            k_params, aero_name, coords = preprocess_from_dat(aerofoil_name=params['aero_name'], dat_directory=str(self.dat_dir))
-        elif 'coords' in params:
-            k_params = get_kulfan_parameters(coordinates=np.array(params['coords']), n_weights_per_side=6)
-            aero_name = None
-            coords = params['coords']
-        else:
-            k_params = params['k_params']
-            aero_name = None
-            coords = None
-        # Only update attributes if not already set (avoid unnecessary overwrites)
+        k_params, aero_name, coords = self._extract_params_from_key(input_key)  # Upgrade: Refactored
+        # Update attributes only if not set
         if self.k_params is None:
             self.k_params = k_params
         if self.aero_name is None and aero_name is not None:
             self.aero_name = aero_name
         if self.coords is None and coords is not None:
             self.coords = coords
+            
+        if k_params is None:
+            raise CurveGenError("No k_params available for preprocessing.")
+            
         X_input = np.array(preprocess_kulfan_parameters(k_params), dtype=np.float32).reshape(1, -1)
         X_scaled = self.X_scaler.transform(X_input)
         return torch.from_numpy(X_scaled).float().to(self.device)
 
-
-
     def _generate(self) -> np.ndarray:
         """
         Processes the input, scales it, runs the model, and inverse transforms the predictions.
-        Uses an efficient LRU cache for repeated predictions.
+        Uses LRU cache for repeated predictions.
         Returns:
             y_pred: np.ndarray of predictions.
         """
-        # Use a tuple of input type and value for cache key (faster than json.dumps)
+        # Create input_key - convert numpy arrays to lists for JSON serialization
         if self.dat_path is not None:
             input_key = json.dumps({"dat_path": self.dat_path}, sort_keys=True)
         elif self.aero_name is not None:
             input_key = json.dumps({"aero_name": self.aero_name}, sort_keys=True)
         elif self.coords is not None:
-            input_key = json.dumps({"coords": self.coords}, sort_keys=True)
+            # Convert numpy arrays to lists for JSON serialization
+            coords_serializable = self.coords if isinstance(self.coords, list) else self.coords.tolist()
+            input_key = json.dumps({"coords": coords_serializable}, sort_keys=True)
         else:
-            input_key = json.dumps({"k_params": self.k_params}, sort_keys=True)
+            # Convert k_params dict values from numpy arrays to lists for JSON serialization
+            if self.k_params is None:
+                raise CurveGenError("No valid input provided for prediction generation.")
+            k_params_serializable = {}
+            for key, value in self.k_params.items():
+                if isinstance(value, np.ndarray):
+                    k_params_serializable[key] = value.tolist()
+                else:
+                    k_params_serializable[key] = value
+            input_key = json.dumps({"k_params": k_params_serializable}, sort_keys=True)
 
-        # Manual LRU cache
-        if input_key in self._prediction_cache:
-            return self._prediction_cache[input_key]
-
-        X_tensor = self._preprocess_input(input_key)
-        if X_tensor.ndim == 2:
-            X_tensor = X_tensor.unsqueeze(0)
-        with torch.no_grad():
-            y_pred_scaled = self.model(X_tensor).cpu().numpy()
-        y_pred = self.y_scaler.inverse_transform(y_pred_scaled).flatten()
-        # LRU cache management
-        if len(self._prediction_cache) >= self._cache_size:
-            # Remove oldest item
-            oldest_key = next(iter(self._prediction_cache))
-            del self._prediction_cache[oldest_key]
-        self._prediction_cache[input_key] = y_pred
-        return y_pred
-
-
-
+        return self._prediction_cache(input_key)  # Upgrade: Use cached method
 
     def get_data(self) -> Dict:
         """
@@ -182,14 +201,15 @@ class CurveGen:
             'predictions': self.y_pred,
         }
 
-
-
-    def plot_curve(self) -> None:
+    def plot_curve(self, save_path: Optional[str] = None, **kwargs) -> None:  # Upgrade: Add save option and kwargs
         """
         Plots the lift coefficient (CL) curve for the given aerofoil.
+        Args:
+            save_path: Optional path to save the plot.
+            **kwargs: Additional Matplotlib plot options.
         """
         if self.y_pred is None:
-            raise ValueError("No predictions available. Ensure `_generate()` has been executed.")
+            raise CurveGenError("No predictions available. Ensure `_generate()` has been executed.")
         y_pred = self.y_pred
         n = len(y_pred) // 2
         cls = y_pred[:n]
@@ -198,31 +218,42 @@ class CurveGen:
         alphas_sorted = np.array(alphas)[idx]
         cls_sorted = np.array(cls)[idx]
         plt.figure(figsize=(8, 6))
-        plt.plot(alphas_sorted, cls_sorted, '-', label=(self.aero_name.upper() if self.aero_name else "Predicted Curve"), linewidth=2)
+        plt.plot(alphas_sorted, cls_sorted, '-', label=(self.aero_name.upper() if self.aero_name else "Predicted Curve"), **kwargs)
         plt.xlabel("Angle of Attack (Alpha)")
         plt.ylabel("Lift Coefficient (CL)")
         plt.legend()
         plt.grid(True)
         plt.title(f"Predicted Lift Curve for {self.aero_name.upper() if self.aero_name else 'Aerofoil'}")
         plt.tight_layout()
+        if save_path:
+            plt.savefig(save_path)
         plt.show()
 
-
-
-    def plot_aero(self) -> None:
+    def plot_aero(self, save_path: Optional[str] = None, **kwargs) -> None:  # Upgrade: Add save option and kwargs
         """
         Plots the aerofoil shape.
+        Args:
+            save_path: Optional path to save the plot.
+            **kwargs: Additional Matplotlib plot options.
         """
         if self.coords is None:
-            raise ValueError("No coordinates available. Ensure `_preprocess()` has been executed or provide coordinates.")
+            raise CurveGenError("No coordinates available. Ensure `_preprocess()` has been executed or provide coordinates.")
         coords = np.array(self.coords)
         x = coords[:, 0]
         y = coords[:, 1]
         plt.style.use('bmh')
         plt.figure(figsize=(8, 6))
         plt.ylim((-0.5, 0.5))
-        plt.plot(x, y, label=(self.aero_name.upper() if self.aero_name else "Aerofoil"), linewidth=2)
+        plt.plot(x, y, label=(self.aero_name.upper() if self.aero_name else "Aerofoil"), **kwargs)
         plt.title(self.aero_name.upper() if self.aero_name else "Aerofoil")
         plt.legend(fontsize='small')
         plt.tight_layout()
+        if save_path:
+            plt.savefig(save_path)
         plt.show()
+
+    def save_data(self, file_path: str) -> None:  # Upgrade: New method to save data
+        """Save prediction data to a JSON file."""
+        data = self.get_data()
+        with open(file_path, 'w') as f:
+            json.dump(data, f, indent=4, cls=NumpyEncoder)
